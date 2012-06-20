@@ -1,0 +1,46 @@
+/* author: Alberto Franco
+ * file  : style.css
+ * 
+ * Contains the basic style for the site.
+ */ 
+
+body, html {
+    maring: 0;
+    background-color: #e5e5e5;
+    /*background-image: url('bg.png');*/
+    font-family: 'Acme', sans-serif;
+    text-shadow: #efefef 2px 2px 2px;
+}
+
+#wrapper {
+    padding: 10px;
+    background-color: #ddd;
+    margin:auto;
+    margin-top: 10px;
+    border-radius: 7px;
+    box-shadow:  #6374AB 2px 2px 2px;
+    width: 960px;
+}
+
+
+h1 {
+    text-align:center;
+    width: 80%;
+    margin:auto;
+    border-bottom: 1px solid #333;
+}
+
+h2 {
+    font-style: italic;
+    
+}
+
+#footer {
+    text-align: right;
+    font-size: 0.7em;
+    border-top: 1px solid #333;
+    width:95%;
+    margin:auto;
+    padding:3px;
+}
+
