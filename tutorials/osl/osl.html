@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>Open Shading Language Tutorial</title>
+    <link href='http://fonts.googleapis.com/css?family=Puritan:400,700' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="style.css" />
+</head>
+
+<body>
+<h1>OPEN SHADING LANGUAGE</h1>
+<p>
+I have recently come to know the 
+<a href="https://github.com/imageworks/OpenShadingLanguage">Open Shading Language</a> project by 
+<a href="http://opensource.imageworks.com/">Sony ImageWorks</a>. For those, like me, that are 
+enthused by computer graphics it is a great possibility to taste a professional shading language 
+without the need to buy expensive software such as Pixar's RenderMan. The Open Shading Language 
+(OSL from now on for sake of brevity) is a open-source implementation of a shading language for 
+photorealistic image production. It is currently in use at ImageWorks and it has been used for 
+many of their award-winning production. It sounds a little bit cheesy but truly, if you ever 
+experienced shader programming at any level you will love it. As the development of the Open Shading
+Language is ongoing, by the time you read this article the informations contained here may not be 
+valid anymore. Please refer to the latest documentation in order to port the shaders contained here
+to newer language versions.
+</p> 
+
+<h2>The Language</h2>
+<p>
+Designers of OSL has, IMHO, as their main source of inspiration the RenderMan shading language. Begin
+probably the first (this is for sure, it is the first shading language at all) and most used shading 
+language for off-line production, OSL takes lot of inspiration from Pixar's counterpart. We find 
+four different types of shaders (text in italic is extracted from the OSL specification):
+</p>
+<img class="right-img" src="img/fst.png" />
+<ul>
+    <li>
+        <code><b>surface</b></code> shaders. <i>Surface shaders determine the basic material properties 
+        of a surface and how it reacts to light.</i> They are responsible for computing the color 
+        (a color closure, we will see this in detail) of the material. If you have experience with 
+        RenderMan you know what I am talking about, if you come from a GLSL or HLSL background these
+        type of shaders are something to fragment/pixel shader programs in those frameworks. These 
+        programs calculate the reaction of a surface to a given light stimuli. 
+    </li>
+
+    <li>
+        <code><b>displacement</b></code> shaders. <i>Displacement shaders alter the position and 
+        shading normal (or, optionally, just the shading normal) to make a piece of geometry appear 
+        deformed, wrinkled, or bumpy.</i> So far so good, the OSL specification explanation is pretty
+        self-explanatory. In common GPU programming these are called vertex shaders and has exactly 
+        the same purpose (more or less). These are the only shader that can manipulate the geometry
+        and this is exactly their purpose, if you want to implement bump mapping this is the shader 
+        type you want to use. 
+    </li>
+    <li>
+        <code><b>volume</b></code> shaders. <i>Volume shaders describe how a participating medium 
+        (air, smoke, glass, etc.) reacts to light and affects the appearance of objects on the other 
+        side of the medium.</i> Also this is quite self-explanatory. The volume shader describe the 
+        behavior of light across the particular geometry that delimits itself. The concept is 
+        similar to surface shaders except that the shader may be called from a point inside the 
+        volume and not only on the geometric primitives.
+    </li>
+    <li>
+        <code><b>shader</b></code> shaders. <i>Generic shaders are used for utility code, generic 
+        routines that may be called as individual layers in a shader group.</i> The most general 
+        version, these kind of programs can be used for any type of computation (but cannot modify 
+        the geometry) and can have whatsoever output values. The extract from the documentation 
+        introduce an important concept: <i>shader groups</i>. We will discuss this later on.
+    </li>
+</ul>
+<p>
+Those of you that eat RenderMan and cornflakes in the morning (allow me to use this Italian colloquial
+metaphor) will immediately notice that there are a few difference from the RenderMan language. Light 
+shader are missing from this list (although they are listed in the official documentation), probably
+these particular kind of programs are not yet supported by the language. We will not discuss about 
+those until some documentation will pop up somewhere. 
+</p>
+
+<p>
+If you are comfortable with C and you have no problem with other similar frameworks you will learn 
+OSL in a flash. Its syntax is heavily inspired by the aforementioned language and its shading dialects.
+Each compilation unit can contains one and only one shader. The compiler will give you an error 
+if you define multiple shaders per file. Files usually ends with <code>.osl</code> extensions. Here
+we define a simple shader extracted from the Blender Cycles documentation:
+</p>
+<div class="osl">
+<code>
+<pre>
+#include &lt;stdosl.h&gt;
+
+shader SimpleMaterial(
+    color diffuse_color = color(0.6, 0.8, 0.6),
+    float noise_factor = 0.5,
+    output closure color bsdf = diffuse(N))
+{
+   color material_color = diffuse_color * mix(1.0, noise(P * 10.0), noise_factor);
+   bsdf = material_color * diffuse(N);
+}
+</pre>
+</code>
+</div>
+<p>
+Lot of stuff in this simple example. Here you can understand the basic shader syntax, it resembles a
+function declaration in C/C++ with some special adding. The <code>shader</code> keyword tells the 
+compiler that the compilation unit defines a generic shader, that may be substituted by <code>surface</code>,
+<code>volume</code> or <code>displacement</code> according to your needs. The parameter list has default 
+values for each shader parameter. You must define a default value for each parameter and those are 
+treated as constants, only output parameters may be assigned. The <code>output</code> parameter 
+defines what the shader computes. In our simple example we want to calculate a color so we provide 
+a <code>closure color</code> as output parameter. 
+</p>
+
+<p>
+The concept of closures may not be familiar to everyone, hence it is important to spend a few words 
+on it. <i>A closure is an expression or a function call that will be stored along with necessary 
+contextual information, to be evaluated at a later time.</i> This means that the evaluation of 
+<code>bsdf</code> in our example shader could be done in a different time frame w.r.t. the execution
+of the shader. This concept remains unclear here but it is clearer used with functions, if you are 
+familiar with C++ 11 a similar concept there are lambdas. A closure is a generic holder for any type
+(data or functions) that can be evaluated later that its creation so it needs to store all its 
+context, if I managed to confuse you enough then it means that you are on the way to understand 
+this concept. Wikipedia has a really good explanation. In OSL (I think, not sure about this) is to
+optimize shader calculation using lazy evaluation of closures trying to delay later in the time the 
+evaluation of a shader. 
+</p>
+
+<p>
+Another important thing to understand is how shader collaborate one with each other. If you have a 
+<img class="img-left" src="img/blnd_node_net.png" />   
+GLSL background (as I did before diving into OSL) you may find disturbing the lack of a defined 
+pipeline that connect the execution and the data flow across shaders. Indeed, once you understand that 
+OSL shaders collaborate through a user defined pipeline you will be amazed how flexible this mechanism
+is. In your renderer (Cycles in my case) you can specify your own pipeline and how data is streamed 
+across your kernels. When you create a <i>script</i> node Blender allow you to choose its source, 
+tries to compile it with OSL compiler and, if successful, displays the input and output parameters
+as in the figure on the right. You can use other shaders to generate input parameters or use bundled 
+nodes. The OSL specification let to each single renderer implementation the freedom to choose which
+mechanism to use to enable collaboration between shaders. Each OSL script defines a node in blender
+material network that can be connected to obtain the desired result in your final render. A nice 
+feature of Cycles is that it gives you an interactive render window that allow you to see the result 
+of your changes in quasi-real-time. 
+
+</p>
+
+<h2>Setting up a test environment</h2>
+<p>
+You may want to setup your own test environment now, to test the power and the beauty of OSL. Here 
+is a quick guide on how to get ready to write some cool shaders with Blender and Cycles. Please notice
+that OSL is supported since Blender 2.65 so you have to pick that or a new version of 
+<a href="http://www.blender.org/">Blender</a>. I am using version 2.69 for this tutorial.
+</p>
+<img class="right-img" src="img/render_select.png">
+
+<ul>
+    <li>
+        You need to first select Cycles render from the upper right drop-down menu. The default value is 
+        <i>Blender Render</i>, you must change this. 
+    </li>
+    <li>
+        In the render property tab you must activate OSL support. This will force the rendering to 
+        happen in the CPU instead of using GPU acceleration, we hope that in the future this will 
+        change. You are now ready to create your first shader. The default cube is good enough to start. 
+    </li>
+    <li>
+        Open the internal text editor, you can also use external data field but for the first example 
+        I would simply use the internal editor. There you can copy the script above, save your file. 
+    </li>
+        Go to the <i>material tab</i> there you need to specify that you will use nodes. 
+    </li>
+    <li>
+        Go to the <i>node editor</i> and remove the default <i>Diffuse BSDF</i> node. Add a script 
+        node and use the script you just pasted, if it is not immediately updated then you need to 
+        hit the refresh button. If you have compilation errors you will get an error message and you 
+        will see them in the console (<i>Window &raquo; Toggle System Console</i>). 
+    </li>
+    <li>
+        Once your script is correctly compiled the node input and output will change, in our example 
+        you may want to connect our <code>bsdf</code> output to <i>Surface</i> input in your 
+        <i>Material Output</i> node. 
+    </li>
+    <li>
+        The last step is to switch the viewport from <i>Solid</i> mode to <i>Render</i>. There you 
+        will see your result in an interactive render window that will update every time you change
+        a parameter. 
+    </li>
+</ul>
+<p>
+You can play around with shaders and see what happens in real-time in the interactive rendering 
+window. This is a very fast way to develop great materials. You can tweak rendering options for 
+both preview and final render in the render tab in the properties. As you may want to create your 
+own library I suggest you to play with Blender internal text editor (that does also a good job with
+OSL syntax highlight) and then create your shaders in an external text editor. 
+</p>
+
+<h2>A full example: Cornell box</h2>
+<p>
+To conclude this short tutorial about the Open Shading Language I would like to show a full example 
+with a couple of shaders. My test scene is a 
+<a href="http://en.wikipedia.org/wiki/Cornell_box">Cornell box</a> with some custom meshes each with
+its material written in OSL. The result rendered image is shown below. We have shaders for each mesh
+and a shader that generate the colors for the box. 
+</p>
+<img src="img/full.png" class="center-full">
+<p>
+Below are listed the various shaders used for generating this image. The lamp is a mesh with an 
+emissive material. You find the <code>.blend</code> file attach at the bottom of the page. 
+</p>
+
+<div class="osl">
+<code>
+<pre>
+// -- Cornell.osl - Generate the Cornell box material ---------------
+#include "stdosl.h"
+
+#define POS_Y normal(0.0, 1.0, 0.0)
+#define NEG_Y normal(0.0, -1.0, 0.0)
+#define EPSILON 1e-5
+
+surface Cornell(output closure color bsdf = 0)
+{
+    color result = color(0, 1, 0);
+    
+    if (dot(N, POS_Y) &lt; EPSILON) {
+        result = color(1, 0, 0);
+    }
+    
+    if (fabs(dot(N, NEG_Y)) &lt; EPSILON) {
+        result = color(1, 1, 1);
+    }
+    bsdf = result * diffuse(N);
+}
+
+// -- Glass.osl - Generate the glass material on Suzanne ------------
+#include "stdosl.h"
+
+#define IOR_THRESHOLD 1.000001
+
+float FresnelDielectric(vector i, normal n, float eta)
+{
+    float c = fabs(dot(i, n));
+    float g = eta * eta - 1 + c * c;
+    float result = 1.0;
+    
+    if (g > 0) {
+        g = sqrt(g);
+        float a = (g - c) / (g + c);
+        float b = (c * (g + c) - 1) / (c * (g + c) + 1);
+        result = 0.5 * a * a * (1 + b * b);
+    }
+    
+    return result;
+}
+
+surface Glass(
+    color diffuse_col = 0.8, 
+    float ior = 1.45, 
+    output closure color bsdf = 0)
+{
+    float real_ior = max(ior, IOR_THRESHOLD);
+    float eta = backfacing()? 1.0 / real_ior : real_ior;
+    float fr = FresnelDielectric(I, N, eta);
+    
+    bsdf = diffuse_col * (fr * reflection(N) + (1.0 - fr) * refraction(N, eta));
+}
+
+// -- Metal.osl - Generate the metal reflection ---------------------
+#include "stdosl.h"
+
+surface Metal(
+    color diffuse_col = 0.8,
+    float roughness = 1.5,
+    output closure color bsdf = 0) 
+{
+    bsdf = diffuse_col * reflection(N);
+}
+
+// -- Velvet.osl - Generate the velvet surface ----------------------
+#include "stdosl.h"
+
+surface Metal(
+    color diffuse_col = 0.8,
+    float roughness = 1.5,
+    output closure color bsdf = 0) 
+{
+    bsdf = diffuse_col * reflection(N);
+}
+</pre>
+</code>
+</div>
+<p>
+Here you can download the file <a href="./blend/cornell.blend">cornell.blend</a>. That's all folks! 
+Let me know if you liked this tutorial, I will try to upload more examples and document them as soon
+as I get some more time. 
+</p>
+<div id="footer">
+This work is licensed under a 
+<a rel="license" href="http://creativecommons.org/licenses/by-sa/3.0/deed.en_US">Creative Commons 
+Attribution-ShareAlike 3.0 Unported License</a>. <a href="http://thhube.github.com">&laquo; Back!</a>
+</div>
+</body>
+</html>
